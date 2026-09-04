@@ -21,50 +21,58 @@ const hookMarker = "AGENT_FRAME_HOOK";
 /** Sessions untouched for this long are treated as crashed leftovers. */
 const staleAfterMs = 12 * 60 * 60 * 1000;
 
+/**
+ * A dead session leaves no file event behind, so the directory is swept on a
+ * timer as well as on every change.
+ */
+const sweepIntervalMs = 30 * 1000;
+
 const shellPrelude =
   `${hookMarker}=1; d=$(cat); ` +
   `i=$(printf '%s' "$d" | grep -o '"session_id":"[^"]*"' | head -1 | ` +
   `cut -d'"' -f4 | tr -cd 'A-Za-z0-9_-'); `;
-
-const writeCommand =
-  shellPrelude +
-  `if [ -n "$i" ]; then m="$HOME/.agent-frame/sessions"; mkdir -p "$m"; ` +
-  `printf '%s' "$d" > "$m/$i.tmp" && mv -f "$m/$i.tmp" "$m/$i.json"; fi; exit 0`;
 
 const deleteCommand =
   shellPrelude +
   `if [ -n "$i" ]; then rm -f "$HOME/.agent-frame/sessions/$i.json"; fi; exit 0`;
 
 /**
- * Tool events carry the whole tool input and response, which can run to
- * megabytes. Only the identity fields are ever read back, so re-emit those
- * instead of the payload.
+ * Only the identity fields are ever read back, and a tool event carries its
+ * whole input and response, which can run to megabytes, so every hook re-emits
+ * those fields instead of its payload. `$PPID` is the Claude process that ran
+ * the hook: a session whose process is gone had its window closed without
+ * SessionEnd ever firing, which is how the watcher recognises it.
  */
-function compactCommand(event: string): string {
+function writeCommand(event: string): string {
   return (
     shellPrelude +
     `c=$(printf '%s' "$d" | grep -o '"cwd":"[^"]*"' | head -1 | cut -d'"' -f4); ` +
     `if [ -n "$i" ] && [ -n "$c" ]; then m="$HOME/.agent-frame/sessions"; ` +
     `mkdir -p "$m"; ` +
-    `printf '{"session_id":"%s","cwd":"%s","hook_event_name":"${event}"}' ` +
-    `"$i" "$c" > "$m/$i.tmp" && mv -f "$m/$i.tmp" "$m/$i.json"; fi; exit 0`
+    `printf '{"session_id":"%s","cwd":"%s","hook_event_name":"${event}","pid":%s}' ` +
+    `"$i" "$c" "$PPID" > "$m/$i.tmp" && mv -f "$m/$i.tmp" "$m/$i.json"; fi; exit 0`
   );
 }
 
 /** Hook events we register, and the command each one runs. */
 const hookEvents: Record<string, string> = {
-  SessionStart: writeCommand,
-  UserPromptSubmit: writeCommand,
-  Notification: writeCommand,
-  PermissionRequest: writeCommand,
+  SessionStart: writeCommand("SessionStart"),
+  UserPromptSubmit: writeCommand("UserPromptSubmit"),
+  Notification: writeCommand("Notification"),
+  PermissionRequest: writeCommand("PermissionRequest"),
   // Bracket the permission prompt: PreToolUse lands before it, PostToolUse
   // once the tool actually ran, which is the only signal that an answered
   // prompt let the session carry on working.
-  PreToolUse: compactCommand("PreToolUse"),
-  PostToolUse: compactCommand("PostToolUse"),
-  Stop: writeCommand,
+  PreToolUse: writeCommand("PreToolUse"),
+  PostToolUse: writeCommand("PostToolUse"),
+  Stop: writeCommand("Stop"),
   SessionEnd: deleteCommand,
 };
+
+/** The settings entry one hook event gets, used to write and to recognise it. */
+function hookEntry(command: string): Record<string, unknown> {
+  return { hooks: [{ type: "command", command, timeout: 5 }] };
+}
 
 /** Maps a hook event name onto the frame state it implies. */
 function stateForEvent(event: string): AgentState | undefined {
@@ -88,6 +96,22 @@ interface HookPayload {
   session_id?: unknown;
   cwd?: unknown;
   hook_event_name?: unknown;
+  pid?: unknown;
+}
+
+/**
+ * Whether the process that wrote a session file is still around. Closing the
+ * Claude Code panel kills its process without running SessionEnd, so the file
+ * it leaves behind is the only thing still claiming the session exists.
+ */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the process is there but owned by someone else.
+    return (error as NodeJS.ErrnoException)?.code === "EPERM";
+  }
 }
 
 function readJsonFile(file: string): unknown {
@@ -122,13 +146,36 @@ export function areHooksInstalled(): boolean {
     return false;
   }
 
-  return Object.keys(hookEvents).every((event) => {
+  return Object.entries(hookEvents).every(([event, command]) => {
     const entries = (hooks as Record<string, unknown>)[event];
+    const expected = JSON.stringify(hookEntry(command));
     return (
       Array.isArray(entries) &&
-      entries.some((entry) => JSON.stringify(entry).includes(hookMarker))
+      entries.some((entry) => JSON.stringify(entry) === expected)
     );
   });
+}
+
+/**
+ * True when hooks of ours are present in any shape, including the ones an
+ * older version of the extension wrote. Those are refreshed in place rather
+ * than asked about again: the user already agreed to them once.
+ */
+export function areOwnHooksPresent(): boolean {
+  const settings = readJsonFile(claudeSettingsPath);
+  const hooks =
+    settings && typeof settings === "object"
+      ? (settings as Record<string, unknown>).hooks
+      : undefined;
+  if (!hooks || typeof hooks !== "object") {
+    return false;
+  }
+
+  return Object.values(hooks as Record<string, unknown>).some(
+    (entries) =>
+      Array.isArray(entries) &&
+      entries.some((entry) => JSON.stringify(entry).includes(hookMarker)),
+  );
 }
 
 /**
@@ -154,7 +201,7 @@ export function installHooks(): void {
           (entry) => !JSON.stringify(entry).includes(hookMarker),
         )
       : [];
-    entries.push({ hooks: [{ type: "command", command, timeout: 5 }] });
+    entries.push(hookEntry(command));
     hooks[event] = entries;
   }
 
@@ -218,6 +265,7 @@ export function uninstallHooks(): void {
 export class ClaudeWatcher implements vscode.Disposable {
   private watcher: fs.FSWatcher | undefined;
   private timer: NodeJS.Timeout | undefined;
+  private sweep: NodeJS.Timeout | undefined;
   private scanning = false;
   private rescan = false;
   /**
@@ -250,6 +298,7 @@ export class ClaudeWatcher implements vscode.Disposable {
       // Without a watcher the extension still works through the commands.
       return;
     }
+    this.sweep = setInterval(() => void this.scan(), sweepIntervalMs);
     void this.scan();
   }
 
@@ -257,6 +306,10 @@ export class ClaudeWatcher implements vscode.Disposable {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = undefined;
+    }
+    if (this.sweep) {
+      clearInterval(this.sweep);
+      this.sweep = undefined;
     }
     this.watcher?.close();
     this.watcher = undefined;
@@ -338,6 +391,24 @@ export class ClaudeWatcher implements vscode.Disposable {
         typeof payload.hook_event_name === "string";
 
       if (readable && !isInsideWorkspace(payload.cwd as string)) {
+        this.known.delete(id);
+        continue;
+      }
+
+      // Claude only deletes the file on SessionEnd, which never runs when its
+      // window or panel is closed, so a session whose process is gone is
+      // cleaned up here instead. Sessions written by an older version of the
+      // hooks carry no pid and fall back to the staleness sweep above.
+      if (
+        readable &&
+        typeof payload.pid === "number" &&
+        !isProcessAlive(payload.pid)
+      ) {
+        try {
+          fs.unlinkSync(full);
+        } catch {
+          // Another window may have pruned it first.
+        }
         this.known.delete(id);
         continue;
       }

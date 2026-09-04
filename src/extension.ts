@@ -7,6 +7,7 @@ import {
 import {
   ClaudeWatcher,
   areHooksInstalled,
+  areOwnHooksPresent,
   claudeProvider,
   installHooks,
   uninstallHooks,
@@ -32,7 +33,7 @@ function terminalEnabled(): boolean {
  */
 async function offerHookInstall(context: vscode.ExtensionContext): Promise<void> {
   const declinedKey = "agentFrame.hookInstallDeclined";
-  if (context.globalState.get<boolean>(declinedKey) || areHooksInstalled()) {
+  if (context.globalState.get<boolean>(declinedKey)) {
     return;
   }
 
@@ -51,6 +52,28 @@ async function offerHookInstall(context: vscode.ExtensionContext): Promise<void>
   } else if (choice === never) {
     await context.globalState.update(declinedKey, true);
   }
+}
+
+/**
+ * Hooks from an older version of the extension are rewritten in place: the user
+ * agreed to them once, and only our own entries change. Asking again is kept
+ * for the case where there is nothing of ours in the file yet.
+ */
+async function ensureHooks(context: vscode.ExtensionContext): Promise<void> {
+  if (areHooksInstalled()) {
+    return;
+  }
+
+  if (areOwnHooksPresent()) {
+    try {
+      installHooks();
+      return;
+    } catch {
+      // Falls through to the prompt, which reports the failure itself.
+    }
+  }
+
+  await offerHookInstall(context);
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -168,7 +191,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   if (claudeEnabled()) {
-    void offerHookInstall(context);
+    void ensureHooks(context);
   }
 }
 

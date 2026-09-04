@@ -79,8 +79,14 @@ Each hook writes its payload to `~/.agent-frame/sessions/<session id>.json`, whi
 | `SessionEnd` | session removed |
 
 The tool hooks are what bring the frame back to busy after you answer a
-permission prompt or a question; they write only the session id and `cwd`
-rather than the full payload, which for a tool response can be megabytes.
+permission prompt or a question. Every hook writes only the session id, `cwd`,
+its event name, and the process id of the Claude session, rather than the full
+payload, which for a tool response can be megabytes.
+
+Closing a Claude Code panel or window kills its process without running
+`SessionEnd`, so the file it wrote would otherwise keep the frame coloured. The
+extension therefore also drops a session whose process id is no longer running,
+checking on every file change and once every 30 seconds.
 
 Because the hooks live in the CLI, this covers Claude Code in the sidebar, in a terminal, and in worktrees alike. Every VS Code window watches the same directory and applies only the sessions whose `cwd` falls inside its own workspace folders, so several projects can run at once without interfering. Hooks only apply to sessions started after installation.
 
