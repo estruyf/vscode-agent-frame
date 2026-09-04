@@ -39,6 +39,7 @@ The frame follows the most urgent agent in the window. Colors below are the defa
 - `agentFrame.colors.idle`: used when every tracked agent is idle.
 - `agentFrame.colors.autoForeground`: set a black or white title bar and status bar foreground so text stays readable against the state color.
 - `agentFrame.claude.enabled`: track Claude Code sessions through hooks.
+- `agentFrame.copilotChat.enabled`: track GitHub Copilot Chat sessions through hooks.
 - `agentFrame.terminal.enabled`: track agent CLIs launched in the integrated terminal.
 - `agentFrame.terminal.commands`: executable names that count as an agent in the terminal (default `["copilot"]`).
 
@@ -90,13 +91,32 @@ checking on every file change and once every 30 seconds.
 
 Because the hooks live in the CLI, this covers Claude Code in the sidebar, in a terminal, and in worktrees alike. Every VS Code window watches the same directory and applies only the sessions whose `cwd` falls inside its own workspace folders, so several projects can run at once without interfering. Hooks only apply to sessions started after installation.
 
+## GitHub Copilot Chat
+
+Copilot Chat has no cross-extension API for its session state either, but VS Code runs [agent hooks](https://code.visualstudio.com/docs/copilot/customization/hooks) at the same lifecycle points Claude Code does, so the frame follows the chat panel the same way.
+
+Run `Agent Frame: Install Copilot Chat Hooks` (the extension also offers this on first activation). This writes `~/.copilot/hooks/agent-frame.json`, one of the personal hook locations VS Code reads, so a single install covers every workspace and nothing lands in a repository. `Agent Frame: Remove Copilot Chat Hooks` deletes the file again. Hooks have to be enabled in VS Code through `chat.useHooks`, which is on by default.
+
+Each hook writes to `~/.agent-frame/copilot/<session id>.json`:
+
+| Hook | State |
+| --- | --- |
+| `sessionStart` | idle |
+| `userPromptSubmitted`, `preToolUse`, `postToolUse` | busy |
+| `preToolUse` for the question tool | waiting |
+| `agentStop`, `errorOccurred` | idle |
+| `sessionEnd` | session removed |
+
+Copilot has no event for a prompt awaiting an answer, but the tool it uses to ask you a question is announced through `preToolUse` and does not return until you answer, so that hook brackets the wait the way Claude's `Notification` does. A tool waiting on your approval cannot be told apart this way and stays busy.
+
+VS Code spawns the hooks from the extension host of the window that owns the chat, and that process id is what places a session: each window claims the sessions its own extension host wrote, which is also how a session left behind by a closed window is recognised. Hooks only apply to sessions started after installation.
+
 ## Terminal agents
 
 `agentFrame.terminal.commands` matches the executable of commands run in the integrated terminal, using VS Code's shell-integration events. This gives busy while the command runs and idle when it exits, and requires shell integration to be active.
 
 This is a coarser signal than the Claude hooks: a long-running interactive REPL reads as busy for its whole lifetime, because VS Code only reports that the process is still running. It suits one-shot invocations such as `copilot -p "..."`.
 
-GitHub Copilot Chat in the chat panel cannot be tracked at all. It reports session state through the `chatSessionsProvider` proposed API, which is unavailable to published extensions.
 
 ## Provider Integration
 

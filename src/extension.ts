@@ -13,6 +13,14 @@ import {
   uninstallHooks,
 } from "./claude";
 import { TerminalWatcher, copilotProvider } from "./copilot";
+import {
+  CopilotChatWatcher,
+  areCopilotHooksInstalled,
+  areOwnCopilotHooksPresent,
+  copilotChatProvider,
+  installCopilotHooks,
+  uninstallCopilotHooks,
+} from "./copilotChat";
 import { previewColors } from "./preview";
 
 function claudeEnabled(): boolean {
@@ -21,17 +29,85 @@ function claudeEnabled(): boolean {
     .get<boolean>("claude.enabled", true);
 }
 
+function copilotChatEnabled(): boolean {
+  return vscode.workspace
+    .getConfiguration("agentFrame")
+    .get<boolean>("copilotChat.enabled", true);
+}
+
 function terminalEnabled(): boolean {
   return vscode.workspace
     .getConfiguration("agentFrame")
     .get<boolean>("terminal.enabled", true);
 }
 
+/** One agent whose hooks live in a file the user owns. */
+interface Integration {
+  readonly label: string;
+  readonly file: string;
+  install(): void;
+  isInstalled(): boolean;
+  areOwnHooksPresent(): boolean;
+}
+
+const integrations: Record<"claude" | "copilotChat", Integration> = {
+  claude: {
+    label: "Claude Code",
+    file: "~/.claude/settings.json",
+    install: installHooks,
+    isInstalled: areHooksInstalled,
+    areOwnHooksPresent,
+  },
+  copilotChat: {
+    label: "GitHub Copilot Chat",
+    file: "~/.copilot/hooks/agent-frame.json",
+    install: installCopilotHooks,
+    isInstalled: areCopilotHooksInstalled,
+    areOwnHooksPresent: areOwnCopilotHooksPresent,
+  },
+};
+
+function reportInstallFailure(integration: Integration, error: unknown): void {
+  void vscode.window.showErrorMessage(
+    `Agent Frame could not write ${integration.file}: ${
+      error instanceof Error ? error.message : String(error)
+    }`,
+  );
+}
+
 /**
- * Claude reports state through hooks in ~/.claude/settings.json, so the first
- * run asks before touching a file the user owns.
+ * Both agents report state through hooks in a file the user owns, so the first
+ * run asks before touching one. Hooks from an older version of the extension
+ * are rewritten in place instead: the user agreed to them once, and only our
+ * own entries change. Asking is kept for the case where there is nothing of
+ * ours in the file yet.
  */
-async function offerHookInstall(context: vscode.ExtensionContext): Promise<void> {
+async function ensureHooks(context: vscode.ExtensionContext): Promise<void> {
+  const wanted = [
+    ...(claudeEnabled() ? [integrations.claude] : []),
+    ...(copilotChatEnabled() ? [integrations.copilotChat] : []),
+  ];
+
+  const pending: Integration[] = [];
+  for (const integration of wanted) {
+    if (integration.isInstalled()) {
+      continue;
+    }
+    if (integration.areOwnHooksPresent()) {
+      try {
+        integration.install();
+        continue;
+      } catch {
+        // Falls through to the prompt, which reports the failure itself.
+      }
+    }
+    pending.push(integration);
+  }
+
+  if (pending.length === 0) {
+    return;
+  }
+
   const declinedKey = "agentFrame.hookInstallDeclined";
   if (context.globalState.get<boolean>(declinedKey)) {
     return;
@@ -40,45 +116,36 @@ async function offerHookInstall(context: vscode.ExtensionContext): Promise<void>
   const install = "Install hooks";
   const notNow = "Not now";
   const never = "Never ask again";
+  const agents = pending.map((one) => one.label).join(" and ");
+  const files = pending.map((one) => one.file).join(" and ");
   const choice = await vscode.window.showInformationMessage(
-    "Agent Frame can colour the window while Claude Code is working. This adds hooks to ~/.claude/settings.json.",
+    `Agent Frame can colour the window while ${agents} is working. This adds hooks to ${files}.`,
     install,
     notNow,
     never,
   );
 
-  if (choice === install) {
-    await vscode.commands.executeCommand("vscode-agent-frame.installClaudeHooks");
-  } else if (choice === never) {
+  if (choice === never) {
     await context.globalState.update(declinedKey, true);
+    return;
   }
-}
-
-/**
- * Hooks from an older version of the extension are rewritten in place: the user
- * agreed to them once, and only our own entries change. Asking again is kept
- * for the case where there is nothing of ours in the file yet.
- */
-async function ensureHooks(context: vscode.ExtensionContext): Promise<void> {
-  if (areHooksInstalled()) {
+  if (choice !== install) {
     return;
   }
 
-  if (areOwnHooksPresent()) {
+  for (const integration of pending) {
     try {
-      installHooks();
-      return;
-    } catch {
-      // Falls through to the prompt, which reports the failure itself.
+      integration.install();
+    } catch (error) {
+      reportInstallFailure(integration, error);
     }
   }
-
-  await offerHookInstall(context);
 }
 
 export function activate(context: vscode.ExtensionContext): void {
   const frame = new AgentFrame(context.workspaceState);
   const claudeWatcher = new ClaudeWatcher(frame);
+  const copilotChatWatcher = new CopilotChatWatcher(frame);
   const terminalWatcher = new TerminalWatcher(frame);
 
   const applyEnablement = () => {
@@ -87,6 +154,13 @@ export function activate(context: vscode.ExtensionContext): void {
     } else {
       claudeWatcher.dispose();
       void frame.removeProvider(claudeProvider);
+    }
+
+    if (copilotChatEnabled()) {
+      copilotChatWatcher.start();
+    } else {
+      copilotChatWatcher.dispose();
+      void frame.removeProvider(copilotChatProvider);
     }
 
     if (terminalEnabled()) {
@@ -101,6 +175,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     claudeWatcher,
+    copilotChatWatcher,
     terminalWatcher,
     vscode.commands.registerCommand(
       "vscode-agent-frame.setAgentState",
@@ -132,9 +207,7 @@ export function activate(context: vscode.ExtensionContext): void {
         try {
           installHooks();
         } catch (error) {
-          void vscode.window.showErrorMessage(
-            `Agent Frame could not write ~/.claude/settings.json: ${error instanceof Error ? error.message : String(error)}`,
-          );
+          reportInstallFailure(integrations.claude, error);
           return;
         }
         void vscode.window.showInformationMessage(
@@ -148,14 +221,41 @@ export function activate(context: vscode.ExtensionContext): void {
         try {
           uninstallHooks();
         } catch (error) {
-          void vscode.window.showErrorMessage(
-            `Agent Frame could not write ~/.claude/settings.json: ${error instanceof Error ? error.message : String(error)}`,
-          );
+          reportInstallFailure(integrations.claude, error);
           return;
         }
         await frame.removeProvider(claudeProvider);
         void vscode.window.showInformationMessage(
           "Agent Frame hooks removed from ~/.claude/settings.json.",
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      "vscode-agent-frame.installCopilotHooks",
+      async () => {
+        try {
+          installCopilotHooks();
+        } catch (error) {
+          reportInstallFailure(integrations.copilotChat, error);
+          return;
+        }
+        void vscode.window.showInformationMessage(
+          "Agent Frame hooks installed. Copilot Chat sessions started from now on will drive the window colour.",
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      "vscode-agent-frame.uninstallCopilotHooks",
+      async () => {
+        try {
+          uninstallCopilotHooks();
+        } catch (error) {
+          reportInstallFailure(integrations.copilotChat, error);
+          return;
+        }
+        await frame.removeProvider(copilotChatProvider);
+        void vscode.window.showInformationMessage(
+          "Agent Frame hooks removed from ~/.copilot/hooks/agent-frame.json.",
         );
       },
     ),
@@ -180,6 +280,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (
         event.affectsConfiguration("agentFrame.claude.enabled") ||
+        event.affectsConfiguration("agentFrame.copilotChat.enabled") ||
         event.affectsConfiguration("agentFrame.terminal.enabled")
       ) {
         applyEnablement();
@@ -190,9 +291,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  if (claudeEnabled()) {
-    void ensureHooks(context);
-  }
+  void ensureHooks(context);
 }
 
 export function deactivate(): void {}

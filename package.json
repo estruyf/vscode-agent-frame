@@ -104,6 +104,16 @@
         "category": "Agent Frame"
       },
       {
+        "command": "vscode-agent-frame.installCopilotHooks",
+        "title": "Install Copilot Chat Hooks",
+        "category": "Agent Frame"
+      },
+      {
+        "command": "vscode-agent-frame.uninstallCopilotHooks",
+        "title": "Remove Copilot Chat Hooks",
+        "category": "Agent Frame"
+      },
+      {
         "command": "vscode-agent-frame.previewColors",
         "title": "Preview State Colors",
         "category": "Agent Frame"
@@ -143,6 +153,11 @@
           "type": "boolean",
           "default": true,
           "description": "Track Claude Code sessions through hooks in ~/.claude/settings.json."
+        },
+        "agentFrame.copilotChat.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Track GitHub Copilot Chat sessions through hooks in ~/.copilot/hooks/agent-frame.json. Requires the chat.useHooks setting in VS Code."
         },
         "agentFrame.terminal.enabled": {
           "type": "boolean",
