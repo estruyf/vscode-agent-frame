@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="frame" x1="10" y1="14" x2="118" y2="114" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3DDC84"/>
+      <stop offset="0.5" stop-color="#FFB300"/>
+      <stop offset="1" stop-color="#4FC3F7"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="48" y1="50" x2="82" y2="98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#A8DEFF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="28" fill="#0D1321"/>
+
+  <rect x="17.5" y="21.5" width="93" height="85" rx="15" fill="none" stroke="url(#frame)" stroke-width="9"/>
+
+  <path d="M23 45.5 H105" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="32" cy="34" r="3.6" fill="#3DDC84"/>
+  <circle cx="44" cy="34" r="3.6" fill="#FFB300"/>
+  <circle cx="56" cy="34" r="3.6" fill="#4FC3F7"/>
+
+  <path d="M62 55 C64.4 68.6 69.1 73.3 82.7 75.7 C69.1 78.1 64.4 82.8 62 96.4 C59.6 82.8 54.9 78.1 41.3 75.7 C54.9 73.3 59.6 68.6 62 55 Z" fill="url(#spark)"/>
+  <path d="M87 55 C87.9 60 89.2 61.3 94.2 62.2 C89.2 63.1 87.9 64.4 87 69.4 C86.1 64.4 84.8 63.1 79.8 62.2 C84.8 61.3 86.1 60 87 55 Z" fill="#CDEBFF"/>
+</svg>

@@ -1,0 +1,256 @@
+{
+  "name": "vscode-agent-frame",
+  "displayName": "Agent Frame",
+  "description": "See which of your coding agents are working, waiting, or idle at a glance — Agent Frame colors the VS Code window to match.",
+  "version": "0.0.1",
+  "publisher": "eliostruyf",
+  "icon": "assets/icon.png",
+  "galleryBanner": {
+    "color": "#0D1321",
+    "theme": "dark"
+  },
+  "keywords": [
+    "agent",
+    "ai",
+    "claude",
+    "claude code",
+    "copilot",
+    "github copilot",
+    "agent status",
+    "window color",
+    "title bar",
+    "status bar",
+    "color customization",
+    "notification",
+    "awareness",
+    "multi-agent",
+    "hooks",
+    "terminal",
+    "productivity"
+  ],
+  "license": "MIT",
+  "author": "Elio Struyf <elio@struyfconsulting.be> (https://www.eliostruyf.com)",
+  "homepage": "https://github.com/estruyf/vscode-agent-frame#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/estruyf/vscode-agent-frame"
+  },
+  "bugs": {
+    "url": "https://github.com/estruyf/vscode-agent-frame/issues"
+  },
+  "sponsor": {
+    "url": "https://github.com/sponsors/estruyf"
+  },
+  "badges": [
+    {
+      "description": "version",
+      "url": "https://img.shields.io/github/package-json/v/estruyf/vscode-agent-frame?color=green&label=vscode-agent-frame&style=flat-square",
+      "href": "https://github.com/estruyf/vscode-agent-frame"
+    },
+    {
+      "description": "Buy me a coffee",
+      "url": "https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%82%AC%203-blue?logo=buy-me-a-coffee&style=flat-square",
+      "href": "https://www.buymeacoffee.com/zMeFRy9"
+    },
+    {
+      "description": "sponsor",
+      "url": "https://img.shields.io/badge/Sponsor-Elio%20Struyf%20%E2%9D%A4-%23fe8e86?logo=GitHub&style=flat-square",
+      "href": "https://github.com/sponsors/estruyf"
+    }
+  ],
+  "engines": {
+    "vscode": "^1.136.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": true
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscode-agent-frame.setAgentState",
+        "title": "Set Agent State",
+        "category": "Agent Frame"
+      },
+      {
+        "command": "vscode-agent-frame.clearAgentState",
+        "title": "Clear Agent State",
+        "category": "Agent Frame"
+      },
+      {
+        "command": "vscode-agent-frame.resetAgentStates",
+        "title": "Reset Agent States",
+        "category": "Agent Frame"
+      },
+      {
+        "command": "vscode-agent-frame.installClaudeHooks",
+        "title": "Install Claude Code Hooks",
+        "category": "Agent Frame"
+      },
+      {
+        "command": "vscode-agent-frame.uninstallClaudeHooks",
+        "title": "Remove Claude Code Hooks",
+        "category": "Agent Frame"
+      },
+      {
+        "command": "vscode-agent-frame.previewColors",
+        "title": "Preview State Colors",
+        "category": "Agent Frame"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "vscode-agent-frame.setAgentState",
+          "when": "false"
+        },
+        {
+          "command": "vscode-agent-frame.clearAgentState",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Agent Frame",
+      "properties": {
+        "agentFrame.colors.busy": {
+          "type": "string",
+          "default": "#2E7D32",
+          "description": "Window color while one or more agents are working."
+        },
+        "agentFrame.colors.waiting": {
+          "type": "string",
+          "default": "#B26A00",
+          "description": "Window color while agents are waiting for input or approval."
+        },
+        "agentFrame.colors.idle": {
+          "type": "string",
+          "default": "#455A64",
+          "description": "Window color while tracked agents are idle."
+        },
+        "agentFrame.claude.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Track Claude Code sessions through hooks in ~/.claude/settings.json."
+        },
+        "agentFrame.terminal.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Track agent CLIs launched in the integrated terminal. Requires shell integration."
+        },
+        "agentFrame.terminal.commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "copilot"
+          ],
+          "description": "Executable names that count as an agent when run in the terminal."
+        },
+        "agentFrame.colors.source": {
+          "type": "string",
+          "enum": [
+            "custom",
+            "theme"
+          ],
+          "enumDescriptions": [
+            "Use the colors configured in agentFrame.colors.",
+            "Derive colors from the active color theme, falling back to agentFrame.colors when the theme defines none of the candidates."
+          ],
+          "default": "custom",
+          "description": "Where state colors come from."
+        },
+        "agentFrame.colors.autoForeground": {
+          "type": "boolean",
+          "default": true,
+          "description": "Set a black or white foreground on the title bar and status bar so text stays readable against the state color."
+        },
+        "agentFrame.theme.busy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "terminal.ansiGreen",
+            "gitDecoration.addedResourceForeground",
+            "editorGutter.addedBackground",
+            "charts.green"
+          ],
+          "description": "Theme color ids tried in order for the busy state when agentFrame.colors.source is \"theme\"."
+        },
+        "agentFrame.theme.waiting": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "terminal.ansiYellow",
+            "notificationsWarningIcon.foreground",
+            "editorWarning.foreground",
+            "statusBarItem.warningBackground",
+            "problemsWarningIcon.foreground",
+            "charts.yellow"
+          ],
+          "description": "Theme color ids tried in order for the waiting state when agentFrame.colors.source is \"theme\"."
+        },
+        "agentFrame.theme.idle": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "terminal.ansiBlue",
+            "statusBarItem.remoteBackground",
+            "activityBarBadge.background",
+            "focusBorder"
+          ],
+          "description": "Theme color ids tried in order for the idle state when agentFrame.colors.source is \"theme\"."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "vsce:package": "vsce package",
+    "vsce:publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "@types/vscode": "^1.136.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  }
+}
