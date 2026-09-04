@@ -54,7 +54,7 @@ const frameColorKeys: FrameColorKey[] = [
 ];
 
 /** Every key the extension may write, needed to keep theme reads uncontaminated. */
-const ownedKeys = frameColorKeys.flatMap(({ key, foregroundKey }) =>
+export const ownedKeys = frameColorKeys.flatMap(({ key, foregroundKey }) =>
   foregroundKey ? [key, foregroundKey] : [key],
 );
 
@@ -84,6 +84,13 @@ const defaultThemeCandidates: Record<AgentState, string[]> = {
 
 /** Keys this extension owns, remembered across window reloads. */
 const appliedColorsKey = "agentFrame.appliedColors";
+
+/**
+ * Which settings layer those keys were last written to. Only the workspace is
+ * written now, so this is left over from a version that could also write to the
+ * user's own settings, and marks colors still sitting there.
+ */
+const appliedTargetKey = "agentFrame.appliedTarget";
 
 export function withOpacity(color: string, opacity?: number): string {
   if (opacity === undefined) {
@@ -155,6 +162,8 @@ function sameColors(
 export class AgentFrame {
   private readonly agents = new Map<string, AgentState>();
   private appliedColors: Record<string, string>;
+  /** Whether colors of ours are still in the user's own settings. */
+  private strayUserColors: boolean;
   private cachedThemeColors: Record<string, string> | undefined;
   /** Set while the user is previewing, overriding the tracked agent state. */
   private previewColor: string | undefined;
@@ -168,6 +177,7 @@ export class AgentFrame {
   constructor(private readonly memento: vscode.Memento) {
     this.appliedColors =
       memento.get<Record<string, string>>(appliedColorsKey) ?? {};
+    this.strayUserColors = memento.get<string>(appliedTargetKey) === "user";
   }
 
   public async updateAgent(update: AgentUpdate): Promise<void> {
@@ -243,11 +253,26 @@ export class AgentFrame {
   }
 
   public refresh(): Promise<void> {
-    this.queue = this.queue.then(
-      () => this.apply(),
-      () => this.apply(),
-    );
+    return this.enqueue(() => this.apply());
+  }
+
+  private enqueue(task: () => Promise<void>): Promise<void> {
+    this.queue = this.queue.then(task, task);
     return this.queue;
+  }
+
+  /**
+   * Gives up the colors written to the workspace layer without forgetting the
+   * tracked agents. Moving the window onto a workspace file needs this: the
+   * project's .vscode/settings.json becomes the folder layer, which outranks
+   * the workspace file, so whatever is left there would win for good.
+   */
+  public releaseWorkspaceColors(): Promise<void> {
+    return this.enqueue(async () => {
+      await this.clearLayer();
+      this.appliedColors = {};
+      await this.memento.update(appliedColorsKey, {});
+    });
   }
 
   private async apply(): Promise<void> {
@@ -255,12 +280,14 @@ export class AgentFrame {
     const color =
       this.previewColor ??
       (activeState ? this.colorForState(activeState) : undefined);
-    const workbench = vscode.workspace.getConfiguration("workbench");
-    // Only the workspace layer is ours to rewrite. Reading the merged value
-    // here would copy the user's own customizations into .vscode/settings.json.
-    const existing =
-      workbench.inspect<Record<string, string>>("colorCustomizations")
-        ?.workspaceValue ?? {};
+
+    if (this.strayUserColors) {
+      await this.clearUserLayer();
+    }
+
+    // Only the layer we write to is ours to rewrite. Reading the merged value
+    // here would copy the other layers' customizations into that file.
+    const existing = this.layerValue();
     const next = { ...existing };
 
     for (const key of ownedKeys) {
@@ -300,17 +327,81 @@ export class AgentFrame {
       await this.memento.update(appliedColorsKey, applied);
     }
 
+    await this.write(existing, next);
+  }
+
+  /**
+   * The colorCustomizations set in the workspace layer, and only that layer:
+   * the project's .vscode/settings.json, or the .code-workspace file when the
+   * window was opened through one.
+   */
+  private layerValue(): Record<string, string> {
+    return (
+      vscode.workspace
+        .getConfiguration("workbench")
+        .inspect<Record<string, string>>("colorCustomizations")?.workspaceValue ??
+      {}
+    );
+  }
+
+  /** Takes the keys this extension wrote out of that layer, leaving the rest. */
+  private async clearLayer(): Promise<void> {
+    const existing = this.layerValue();
+    const next = { ...existing };
+    for (const key of ownedKeys) {
+      if (next[key] === this.appliedColors[key]) {
+        delete next[key];
+      }
+    }
+    await this.write(existing, next);
+  }
+
+  /**
+   * An earlier version could write the colors to the user's own settings. That
+   * layer is never written now, so whatever it was left holding would stay for
+   * good; it is taken out once, the first time this window paints.
+   */
+  private async clearUserLayer(): Promise<void> {
+    this.strayUserColors = false;
+    const configuration = vscode.workspace.getConfiguration("workbench");
+    const existing =
+      configuration.inspect<Record<string, string>>("colorCustomizations")
+        ?.globalValue ?? {};
+
+    const next = { ...existing };
+    for (const key of ownedKeys) {
+      if (next[key] === this.appliedColors[key]) {
+        delete next[key];
+      }
+    }
+
+    if (!sameColors(next, existing)) {
+      await configuration.update(
+        "colorCustomizations",
+        Object.keys(next).length > 0 ? next : undefined,
+        vscode.ConfigurationTarget.Global,
+      );
+    }
+    await this.memento.update(appliedTargetKey, undefined);
+  }
+
+  private async write(
+    existing: Record<string, string>,
+    next: Record<string, string>,
+  ): Promise<void> {
     // Rewriting the same colors still makes the workbench re-apply them, which
     // reads as a flicker, so only write when the value actually differs.
     if (sameColors(next, existing)) {
       return;
     }
 
-    await workbench.update(
-      "colorCustomizations",
-      Object.keys(next).length > 0 ? next : undefined,
-      vscode.ConfigurationTarget.Workspace,
-    );
+    await vscode.workspace
+      .getConfiguration("workbench")
+      .update(
+        "colorCustomizations",
+        Object.keys(next).length > 0 ? next : undefined,
+        vscode.ConfigurationTarget.Workspace,
+      );
   }
 
   /** Resolves one state to a concrete color, honouring the configured source. */

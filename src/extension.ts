@@ -22,6 +22,7 @@ import {
   uninstallCopilotHooks,
 } from "./copilotChat";
 import { previewColors } from "./preview";
+import { copyDroppedSettings, useWorkspaceFile } from "./workspaceFile";
 
 function claudeEnabled(): boolean {
   return vscode.workspace
@@ -173,6 +174,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
   applyEnablement();
 
+  // Colors are written to a settings file, so the ones left behind when the
+  // window was last closed are still there on open. The watchers repaint only
+  // when a session changes, and a window opened with no agent running has
+  // nothing to change, which would leave those colors standing. Starting the
+  // watchers has already tracked whatever is live, so one refresh here settles
+  // the frame on that, clearing it when there is nothing.
+  void frame.refresh();
+
   context.subscriptions.push(
     claudeWatcher,
     copilotChatWatcher,
@@ -261,6 +270,13 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand("vscode-agent-frame.previewColors", () =>
       previewColors(frame),
+    ),
+    vscode.commands.registerCommand("vscode-agent-frame.useWorkspaceFile", () =>
+      useWorkspaceFile(frame),
+    ),
+    vscode.commands.registerCommand(
+      "vscode-agent-frame.copyDroppedSettings",
+      () => copyDroppedSettings(),
     ),
     vscode.window.onDidChangeActiveColorTheme(() => {
       frame.invalidateTheme();

@@ -117,6 +117,16 @@
         "command": "vscode-agent-frame.previewColors",
         "title": "Preview State Colors",
         "category": "Agent Frame"
+      },
+      {
+        "command": "vscode-agent-frame.useWorkspaceFile",
+        "title": "Store Window Colors in a Workspace File",
+        "category": "Agent Frame"
+      },
+      {
+        "command": "vscode-agent-frame.copyDroppedSettings",
+        "title": "Copy Dropped Folder Settings into the Workspace File",
+        "category": "Agent Frame"
       }
     ],
     "menus": {
@@ -268,5 +278,8 @@
   "overrides": {
     "diff": "^8.0.4",
     "serialize-javascript": "^7.0.6"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }

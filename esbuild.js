@@ -34,6 +34,11 @@ async function main() {
 		sourcemap: !production,
 		sourcesContent: false,
 		platform: 'node',
+		// jsonc-parser resolves to a UMD build under the node default of
+		// ['main', 'module'], and its factory takes require as a parameter, which
+		// leaves the inner requires unresolvable at runtime. The ESM entry uses
+		// static imports and bundles cleanly.
+		mainFields: ['module', 'main'],
 		outfile: 'dist/extension.js',
 		external: ['vscode'],
 		logLevel: 'silent',

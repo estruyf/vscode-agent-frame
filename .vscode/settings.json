@@ -15,5 +15,14 @@
       "label": "Release dev version",
       "template": "#release"
     }
-  ]
+  ],
+  "workbench.colorCustomizations": {
+    "window.activeBorder": "#455A64",
+    "titleBar.activeBackground": "#455A64",
+    "titleBar.activeForeground": "#FFFFFF",
+    "titleBar.inactiveBackground": "#455A6499",
+    "titleBar.inactiveForeground": "#FFFFFF",
+    "statusBar.background": "#455A64",
+    "statusBar.foreground": "#FFFFFF"
+  }
 }

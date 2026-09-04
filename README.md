@@ -45,6 +45,18 @@ The frame follows the most urgent agent in the window. Colors below are the defa
 
 Waiting takes precedence over busy, which takes precedence over idle: a session that needs an answer is what you have to act on, and the frame only goes idle once every tracked session is idle. Clearing the final agent restores the frame colors that Agent Frame changed.
 
+## Keeping the colors out of the project
+
+VS Code has no per-machine workspace settings, and no API to color the title bar or window border at runtime, so the state has to live in a settings file. By default that is the project's `.vscode/settings.json`, which is what makes the color per window: each project shows the state of its own agents. That file is usually committed, though, so whatever color the frame happened to be on is committed with it, and everyone on the project sees it until they change it.
+
+Run `Agent Frame: Store Window Colors in a Workspace File` to avoid that. It writes a `<project>.code-workspace` file next to the folder, offers to add it to `.git/info/exclude` (this clone only) or `.gitignore` (the whole project), clears the colors out of `.vscode/settings.json`, and offers to reopen the window through it. VS Code writes workspace settings into the `.code-workspace` file once a window is opened that way, so the colors stay per window and Git never sees them. Anyone who opens the folder directly is unaffected.
+
+The project's own settings come along. Opening a folder through a workspace file turns its `.vscode/settings.json` into folder settings, where VS Code only honours resource-scoped entries, so anything else in it would quietly stop applying. The command copies the whole file into the workspace file's `settings` to prevent that, minus the frame colors themselves.
+
+Copying everything is safe rather than merely convenient, because folder settings outrank the workspace file. An entry that still counts at folder scope keeps winning from `.vscode/settings.json`, so it carries on following the project and the copy sits there inert; an entry that no longer counts there is only alive because of the copy. Either way nothing silently diverges from what the project asks for. Prune the workspace file by hand if you would rather lose a setting than pin it, and `Agent Frame: Copy Dropped Folder Settings into the Workspace File` puts back anything that turns out not to be reaching the window.
+
+The frame colors are the exception, cleared out of `.vscode/settings.json` on the way past: ignored or not, they would stay committed and would still reach anyone who opens the folder directly.
+
 ## Theme matching
 
 With `agentFrame.colors.source` set to `theme`, each state resolves against the active theme instead of a fixed hex value. `agentFrame.theme.busy`, `agentFrame.theme.waiting`, and `agentFrame.theme.idle` each hold a list of theme color ids; the first one the theme actually defines wins, and `agentFrame.colors.<state>` is the fallback when none of them are. Run `Agent Frame: Preview State Colors` to see and change what each state resolves to.

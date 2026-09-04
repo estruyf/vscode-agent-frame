@@ -196,12 +196,14 @@ export class SessionWatcher implements vscode.Disposable {
       const readable = payload !== undefined && this.source.isReadable(payload);
 
       // The closing hook never runs when a window or panel is closed, so a
-      // session whose process is gone is cleaned up here instead. Any window
-      // may do it, which is why this comes before the ownership check.
+      // session whose process is gone is cleaned up here instead. A file
+      // without a pid was written by an older hook version and can never be
+      // checked against a process again, so it is a leftover too: keeping it
+      // would hold the frame on that session's last state for good. Any window
+      // may clear either, which is why this comes before the ownership check.
       if (
         readable &&
-        typeof payload.pid === "number" &&
-        !isProcessAlive(payload.pid)
+        (typeof payload.pid !== "number" || !isProcessAlive(payload.pid))
       ) {
         this.remove(full);
         this.known.delete(id);
