@@ -134,12 +134,30 @@ export function isProviderAgentState(
   );
 }
 
+/** Shallow comparison, used to leave the settings file alone when nothing moved. */
+function sameColors(
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean {
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => left[key] === right[key])
+  );
+}
+
 export class AgentFrame {
   private readonly agents = new Map<string, AgentState>();
   private appliedColors: Record<string, string>;
   private cachedThemeColors: Record<string, string> | undefined;
   /** Set while the user is previewing, overriding the tracked agent state. */
   private previewColor: string | undefined;
+  /**
+   * Refreshes read the settings file, change it, and write it back. Running two
+   * of those at once lets a stale read undo the write before it, which shows up
+   * as the frame blinking off and on, so they are chained instead.
+   */
+  private queue: Promise<void> = Promise.resolve();
 
   constructor(private readonly memento: vscode.Memento) {
     this.appliedColors =
@@ -147,35 +165,86 @@ export class AgentFrame {
   }
 
   public async updateAgent(update: AgentUpdate): Promise<void> {
-    this.agents.set(
-      `${update.provider}:${update.id}`,
-      normalizeState(update.state),
-    );
+    const key = `${update.provider}:${update.id}`;
+    const state = normalizeState(update.state);
+    if (this.agents.get(key) === state) {
+      return;
+    }
+    this.agents.set(key, state);
     await this.refresh();
   }
 
   public async removeAgent(provider: string, id: string): Promise<void> {
-    this.agents.delete(`${provider}:${id}`);
+    if (!this.agents.delete(`${provider}:${id}`)) {
+      return;
+    }
     await this.refresh();
+  }
+
+  /**
+   * Replaces every agent of one provider at once. A watcher that rescans all of
+   * its sessions repaints the frame a single time this way, rather than once
+   * per session with the frame briefly unset in between.
+   */
+  public async syncProvider(
+    provider: string,
+    states: ReadonlyMap<string, AgentState>,
+  ): Promise<void> {
+    const prefix = `${provider}:`;
+    let changed = false;
+
+    for (const key of [...this.agents.keys()]) {
+      if (key.startsWith(prefix) && !states.has(key.slice(prefix.length))) {
+        this.agents.delete(key);
+        changed = true;
+      }
+    }
+
+    for (const [id, state] of states) {
+      const key = `${prefix}${id}`;
+      if (this.agents.get(key) !== state) {
+        this.agents.set(key, state);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await this.refresh();
+    }
   }
 
   /** Drops every agent for one provider, used when a source is disabled. */
   public async removeProvider(provider: string): Promise<void> {
     const prefix = `${provider}:`;
+    let changed = false;
     for (const key of [...this.agents.keys()]) {
       if (key.startsWith(prefix)) {
         this.agents.delete(key);
+        changed = true;
       }
     }
-    await this.refresh();
+    if (changed) {
+      await this.refresh();
+    }
   }
 
   public async reset(): Promise<void> {
+    if (this.agents.size === 0) {
+      return;
+    }
     this.agents.clear();
     await this.refresh();
   }
 
-  public async refresh(): Promise<void> {
+  public refresh(): Promise<void> {
+    this.queue = this.queue.then(
+      () => this.apply(),
+      () => this.apply(),
+    );
+    return this.queue;
+  }
+
+  private async apply(): Promise<void> {
     const activeState = this.getActiveState();
     const color =
       this.previewColor ??
@@ -220,8 +289,17 @@ export class AgentFrame {
       }
     }
 
-    this.appliedColors = applied;
-    await this.memento.update(appliedColorsKey, applied);
+    if (!sameColors(applied, this.appliedColors)) {
+      this.appliedColors = applied;
+      await this.memento.update(appliedColorsKey, applied);
+    }
+
+    // Rewriting the same colors still makes the workbench re-apply them, which
+    // reads as a flicker, so only write when the value actually differs.
+    if (sameColors(next, existing)) {
+      return;
+    }
+
     await workbench.update(
       "colorCustomizations",
       Object.keys(next).length > 0 ? next : undefined,

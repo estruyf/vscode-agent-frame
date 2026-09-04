@@ -218,7 +218,8 @@ export function uninstallHooks(): void {
 export class ClaudeWatcher implements vscode.Disposable {
   private watcher: fs.FSWatcher | undefined;
   private timer: NodeJS.Timeout | undefined;
-  private tracked = new Set<string>();
+  private scanning = false;
+  private rescan = false;
 
   constructor(private readonly frame: AgentFrame) {}
 
@@ -229,7 +230,14 @@ export class ClaudeWatcher implements vscode.Disposable {
 
     try {
       fs.mkdirSync(sessionsDirectory, { recursive: true });
-      this.watcher = fs.watch(sessionsDirectory, () => this.schedule());
+      this.watcher = fs.watch(sessionsDirectory, (_event, filename) => {
+        // Hooks write a .tmp file and rename it into place; only the rename
+        // matters, and reacting to the temporary file doubles the work.
+        if (filename && !filename.toString().endsWith(".json")) {
+          return;
+        }
+        this.schedule();
+      });
     } catch {
       // Without a watcher the extension still works through the commands.
       return;
@@ -254,10 +262,33 @@ export class ClaudeWatcher implements vscode.Disposable {
     this.timer = setTimeout(() => {
       this.timer = undefined;
       void this.scan();
-    }, 60);
+    }, 120);
   }
 
+  /**
+   * Every session in this workspace is collected first and handed over in one
+   * call, so a scan repaints the frame once. Overlapping scans would each work
+   * from their own half-built view of the directory, so a second one waits and
+   * runs after the first instead.
+   */
   public async scan(): Promise<void> {
+    if (this.scanning) {
+      this.rescan = true;
+      return;
+    }
+
+    this.scanning = true;
+    try {
+      do {
+        this.rescan = false;
+        await this.collect();
+      } while (this.rescan);
+    } finally {
+      this.scanning = false;
+    }
+  }
+
+  private async collect(): Promise<void> {
     let files: string[];
     try {
       files = fs.readdirSync(sessionsDirectory);
@@ -265,7 +296,7 @@ export class ClaudeWatcher implements vscode.Disposable {
       return;
     }
 
-    const seen = new Set<string>();
+    const seen = new Map<string, AgentState>();
     for (const file of files) {
       if (!file.endsWith(".json")) {
         continue;
@@ -307,19 +338,9 @@ export class ClaudeWatcher implements vscode.Disposable {
         continue;
       }
 
-      seen.add(payload.session_id);
-      await this.frame.updateAgent({
-        provider: claudeProvider,
-        id: payload.session_id,
-        state,
-      });
+      seen.set(payload.session_id, state);
     }
 
-    for (const id of [...this.tracked]) {
-      if (!seen.has(id)) {
-        await this.frame.removeAgent(claudeProvider, id);
-      }
-    }
-    this.tracked = seen;
+    await this.frame.syncProvider(claudeProvider, seen);
   }
 }

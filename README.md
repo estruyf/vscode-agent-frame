@@ -7,8 +7,8 @@
 <p align="center">See which of your coding agents are working, waiting, or idle at a glance — Agent Frame colors the VS Code window to match.</p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=eliostruyf.vscode-agent-frame"><img src="https://img.shields.io/visual-studio-marketplace/v/eliostruyf.vscode-agent-frame?style=flat-square&label=Marketplace&color=green" alt="Visual Studio Marketplace" /></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=eliostruyf.vscode-agent-frame"><img src="https://img.shields.io/visual-studio-marketplace/i/eliostruyf.vscode-agent-frame?style=flat-square&label=Installs" alt="Installs" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=eliostruyf.vscode-agent-frame"><img src="https://vscode-marketplace-badge.vercel.app/api/badge/version/eliostruyf.vscode-agent-frame?style=flat-square&label=Marketplace&color=green" alt="Visual Studio Marketplace" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=eliostruyf.vscode-agent-frame"><img src="https://vscode-marketplace-badge.vercel.app/api/badge/installs/eliostruyf.vscode-agent-frame?style=flat-square&label=Installs" alt="Installs" /></a>
   <a href="https://github.com/sponsors/estruyf"><img src="https://img.shields.io/badge/Sponsor-Elio%20Struyf%20%E2%9D%A4-%23fe8e86?logo=GitHub&style=flat-square" alt="Sponsor" /></a>
   <a href="https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2Festruyf%2Fvscode-agent-frame"><img src="https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2Festruyf%2Fvscode-agent-frame&countColor=%23263759&style=flat-square" alt="Visitors" /></a>
 </p>
