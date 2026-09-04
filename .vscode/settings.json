@@ -15,6 +15,5 @@
       "label": "Release dev version",
       "template": "#release"
     }
-  ],
-  "gitActionsDeployer.solutions": []
+  ]
 }
