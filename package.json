@@ -3,6 +3,7 @@
   "displayName": "Agent Frame",
   "description": "See which of your coding agents are working, waiting, or idle at a glance — Agent Frame colors the VS Code window to match.",
   "version": "0.0.1",
+  "preview": true,
   "publisher": "eliostruyf",
   "icon": "assets/icon.png",
   "galleryBanner": {
