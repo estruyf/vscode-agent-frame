@@ -15,6 +15,22 @@
 
 Agent Frame colors VS Code while one or more coding agents are active. It writes only the frame-related entries in `workbench.colorCustomizations` and preserves all other color customizations.
 
+## How it looks
+
+The frame follows the busiest agent in the window. Colors below are the defaults; every state is configurable.
+
+**Busy** — at least one agent is working.
+
+![Agent Frame with the busy color applied to the title bar, window border and status bar](https://raw.githubusercontent.com/estruyf/vscode-agent-frame/main/assets/screenshots/state-busy.png)
+
+**Waiting** — an agent needs your input or approval.
+
+![Agent Frame with the waiting color applied to the title bar, window border and status bar](https://raw.githubusercontent.com/estruyf/vscode-agent-frame/main/assets/screenshots/state-waiting.png)
+
+**Idle** — agents are tracked but none are working.
+
+![Agent Frame with the idle color applied to the title bar, window border and status bar](https://raw.githubusercontent.com/estruyf/vscode-agent-frame/main/assets/screenshots/state-idle.png)
+
 ## Configuration
 
 - `agentFrame.colors.source`: `custom` (default) uses the colors below; `theme` derives them from the active color theme.
