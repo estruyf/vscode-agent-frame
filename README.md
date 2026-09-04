@@ -15,6 +15,20 @@
 
 Agent Frame colors VS Code while one or more coding agents are active. It writes only the frame-related entries in `workbench.colorCustomizations` and preserves all other color customizations.
 
+## Getting started
+
+Install the extension and open a window. Agent Frame watches the integrated terminal on its own, but Claude Code and GitHub Copilot Chat report their state through hooks, and those live in files you own, so the extension asks before writing them:
+
+> Agent Frame can colour the window while Claude Code and GitHub Copilot Chat are working. This adds hooks to `~/.claude/settings.json` and `~/.copilot/hooks/agent-frame.json`.
+
+- **Install hooks** merges the entries into those files, leaving every other hook and setting untouched.
+- **Not now** skips it; the question comes back the next time a window opens.
+- **Never ask again** stops the prompt for good, on every window.
+
+Only the agents you have enabled are named: turn `agentFrame.claude.enabled` or `agentFrame.copilotChat.enabled` off and that half is left alone. If both are still missing you get one prompt covering both, so decline it and use `Agent Frame: Install Claude Code Hooks` or `Agent Frame: Install Copilot Chat Hooks` from the command palette to take just one. Those commands are also the way back in after **Never ask again**, and `Agent Frame: Remove Claude Code Hooks` and `Agent Frame: Remove Copilot Chat Hooks` take the entries out again.
+
+Hooks only apply to sessions started after installation, so restart the Claude Code or Copilot Chat session you already have open. From there the frame follows it: start a prompt and the window turns busy, get asked something and it turns to waiting. A later extension update refreshes its own hooks in place without asking again.
+
 ## How it looks
 
 The frame follows the most urgent agent in the window. Colors below are the defaults; every state is configurable.

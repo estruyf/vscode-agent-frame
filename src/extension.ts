@@ -77,6 +77,15 @@ function reportInstallFailure(integration: Integration, error: unknown): void {
 }
 
 /**
+ * Set once this window has put the question to the user, so that calling
+ * `ensureHooks` again cannot ask a second time. The extension host is per
+ * window, so this resets when a new window opens, which is where "Not now"
+ * gets asked again. "Never ask again" is the answer that has to outlive the
+ * window, and that one is kept in global state instead.
+ */
+let hookPromptShown = false;
+
+/**
  * Both agents report state through hooks in a file the user owns, so the first
  * run asks before touching one. Hooks from an older version of the extension
  * are rewritten in place instead: the user agreed to them once, and only our
@@ -110,17 +119,19 @@ async function ensureHooks(context: vscode.ExtensionContext): Promise<void> {
   }
 
   const declinedKey = "agentFrame.hookInstallDeclined";
-  if (context.globalState.get<boolean>(declinedKey)) {
+  if (hookPromptShown || context.globalState.get<boolean>(declinedKey)) {
     return;
   }
+  hookPromptShown = true;
 
   const install = "Install hooks";
   const notNow = "Not now";
   const never = "Never ask again";
   const agents = pending.map((one) => one.label).join(" and ");
   const files = pending.map((one) => one.file).join(" and ");
+  const verb = pending.length > 1 ? "are" : "is";
   const choice = await vscode.window.showInformationMessage(
-    `Agent Frame can colour the window while ${agents} is working. This adds hooks to ${files}.`,
+    `Agent Frame can colour the window while ${agents} ${verb} working. This adds hooks to ${files}.`,
     install,
     notNow,
     never,
