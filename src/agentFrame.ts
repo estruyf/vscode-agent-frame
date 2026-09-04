@@ -19,9 +19,15 @@ export interface AgentUpdate {
   state: ProviderAgentState;
 }
 
+/**
+ * How several agents collapse into one frame color: the highest number wins.
+ * A session waiting on the user needs an answer before anything else can move,
+ * so it outranks one that is still working, and any active session outranks an
+ * idle one. The frame only goes idle once every tracked session is idle.
+ */
 const statePriority: Record<AgentState, number> = {
-  busy: 3,
-  waiting: 2,
+  waiting: 3,
+  busy: 2,
   idle: 1,
 };
 
@@ -369,9 +375,14 @@ export class AgentFrame {
     this.cachedThemeColors = undefined;
   }
 
+  /** The highest priority state across every tracked agent. */
   private getActiveState(): AgentState | undefined {
-    return [...this.agents.values()].sort(
-      (left, right) => statePriority[right] - statePriority[left],
-    )[0];
+    let active: AgentState | undefined;
+    for (const state of this.agents.values()) {
+      if (!active || statePriority[state] > statePriority[active]) {
+        active = state;
+      }
+    }
+    return active;
   }
 }

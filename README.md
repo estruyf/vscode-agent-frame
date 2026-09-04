@@ -17,32 +17,32 @@ Agent Frame colors VS Code while one or more coding agents are active. It writes
 
 ## How it looks
 
-The frame follows the busiest agent in the window. Colors below are the defaults; every state is configurable.
+The frame follows the most urgent agent in the window. Colors below are the defaults; every state is configurable.
 
 **Busy** — at least one agent is working.
 
 ![Agent Frame with the busy color applied to the title bar, window border and status bar](https://raw.githubusercontent.com/estruyf/vscode-agent-frame/main/assets/screenshots/state-busy.png)
 
-**Waiting** — an agent needs your input or approval.
+**Waiting** — an agent needs your input or approval, even when another one is still working.
 
 ![Agent Frame with the waiting color applied to the title bar, window border and status bar](https://raw.githubusercontent.com/estruyf/vscode-agent-frame/main/assets/screenshots/state-waiting.png)
 
-**Idle** — agents are tracked but none are working.
+**Idle** — agents are tracked but all of them are idle.
 
 ![Agent Frame with the idle color applied to the title bar, window border and status bar](https://raw.githubusercontent.com/estruyf/vscode-agent-frame/main/assets/screenshots/state-idle.png)
 
 ## Configuration
 
 - `agentFrame.colors.source`: `custom` (default) uses the colors below; `theme` derives them from the active color theme.
-- `agentFrame.colors.busy`: used when at least one tracked agent is working.
-- `agentFrame.colors.waiting`: used when no agent is busy but at least one is waiting for input or approval.
-- `agentFrame.colors.idle`: used when tracked agents are idle.
+- `agentFrame.colors.busy`: used when at least one tracked agent is working and none are waiting.
+- `agentFrame.colors.waiting`: used when at least one agent is waiting for input or approval.
+- `agentFrame.colors.idle`: used when every tracked agent is idle.
 - `agentFrame.colors.autoForeground`: set a black or white title bar and status bar foreground so text stays readable against the state color.
 - `agentFrame.claude.enabled`: track Claude Code sessions through hooks.
 - `agentFrame.terminal.enabled`: track agent CLIs launched in the integrated terminal.
 - `agentFrame.terminal.commands`: executable names that count as an agent in the terminal (default `["copilot"]`).
 
-Busy takes precedence over waiting, which takes precedence over idle. Clearing the final agent restores the frame colors that Agent Frame changed.
+Waiting takes precedence over busy, which takes precedence over idle: a session that needs an answer is what you have to act on, and the frame only goes idle once every tracked session is idle. Clearing the final agent restores the frame colors that Agent Frame changed.
 
 ## Theme matching
 

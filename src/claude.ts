@@ -220,6 +220,14 @@ export class ClaudeWatcher implements vscode.Disposable {
   private timer: NodeJS.Timeout | undefined;
   private scanning = false;
   private rescan = false;
+  /**
+   * The last state read for every session of this window. A scan runs while
+   * other sessions are writing their own files, and a file caught mid-rename or
+   * carrying an event we do not map would otherwise drop that session from the
+   * sync, letting a finished session decide the colour while another one is
+   * still working. Its previous state is used instead.
+   */
+  private readonly known = new Map<string, AgentState>();
 
   constructor(private readonly frame: AgentFrame) {}
 
@@ -319,26 +327,39 @@ export class ClaudeWatcher implements vscode.Disposable {
         continue;
       }
 
+      // Named after the session it belongs to, so the file still identifies a
+      // session we already know about even when its contents are unusable.
+      const id = file.slice(0, -".json".length);
       const payload = readJsonFile(full) as HookPayload | undefined;
-      if (
-        !payload ||
-        typeof payload.session_id !== "string" ||
-        typeof payload.cwd !== "string" ||
-        typeof payload.hook_event_name !== "string"
-      ) {
+      const readable =
+        payload &&
+        typeof payload.session_id === "string" &&
+        typeof payload.cwd === "string" &&
+        typeof payload.hook_event_name === "string";
+
+      if (readable && !isInsideWorkspace(payload.cwd as string)) {
+        this.known.delete(id);
         continue;
       }
 
-      if (!isInsideWorkspace(payload.cwd)) {
+      const state = readable
+        ? stateForEvent(payload.hook_event_name as string)
+        : undefined;
+      // Only sessions of this window ever reach `known`, so falling back to it
+      // cannot pull in another workspace's session.
+      const resolved = state ?? this.known.get(id);
+      if (!resolved) {
         continue;
       }
 
-      const state = stateForEvent(payload.hook_event_name);
-      if (!state) {
-        continue;
-      }
+      this.known.set(id, resolved);
+      seen.set(id, resolved);
+    }
 
-      seen.set(payload.session_id, state);
+    for (const id of [...this.known.keys()]) {
+      if (!seen.has(id)) {
+        this.known.delete(id);
+      }
     }
 
     await this.frame.syncProvider(claudeProvider, seen);
